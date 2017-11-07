@@ -2,8 +2,9 @@ package main
 
 import (
 	"math"
-	"readFile"
 	"reflect"
+
+	"github.com/SamuelCarroll/readFile"
 )
 
 // Node -- basic node for our tree struct

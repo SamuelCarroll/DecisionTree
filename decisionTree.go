@@ -2,7 +2,8 @@ package main
 
 import (
 	"fmt"
-	"readFile"
+
+	"github.com/SamuelCarroll/readFile"
 )
 
 var class1 ClassAvg
@@ -16,12 +17,12 @@ var class3Sample []*readFile.Wine
 var setVal float64
 var stopCond float64
 
+//TODO change this to take a slice and treat that as a feature to get to the class final
 func main() {
 	var decTree Tree
-	setVal = 100000000000.0
-	stopCond = 0.84
+	setVal = 100000000000.0 //big value to ignore a already used split feature value
+	stopCond = 0.84         //point were we stop training if we have this percent of a single class
 	decTree.Data.NodeData = readFile.Read("/home/ritadev/Documents/Thesis_Work/Decision-Tree/trainwine.data")
-	fmt.Printf("Error Rate: %f\n", stopCond)
 
 	class1.count = 0
 	class2.count = 0
