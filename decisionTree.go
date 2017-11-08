@@ -1,135 +1,122 @@
-package main
+package DecisionTree
 
 import (
 	"fmt"
 
-	"github.com/SamuelCarroll/readFile"
+	"github.com/SamuelCarroll/DataTypes"
 )
+
+// Node -- basic node for our tree struct
+type Node struct {
+	Leaf       bool
+	IndexSplit int
+	SplitVal   float64
+	Class      int
+}
+
+// Tree -- tree structure
+type Tree struct {
+	Details      Node
+	usedIndicies []int
+	Left         *Tree
+	Right        *Tree
+}
+
+// ClassAvg -- holds the averages of each class used for finding split
+type ClassAvg struct {
+	count    int
+	averages []interface{}
+	stdDev   []interface{}
+}
 
 var class1 ClassAvg
 var class2 ClassAvg
 var class3 ClassAvg
 
-var class1Sample []*readFile.Wine
-var class2Sample []*readFile.Wine
-var class3Sample []*readFile.Wine
+var class1Sample []*dataTypes.Data
+var class2Sample []*dataTypes.Data
+var class3Sample []*dataTypes.Data
 
-var setVal float64
-var stopCond float64
-
-//TODO change this to take a slice and treat that as a feature to get to the class final
-func main() {
-	var decTree Tree
-	setVal = 100000000000.0 //big value to ignore a already used split feature value
-	stopCond = 0.84         //point were we stop training if we have this percent of a single class
-	decTree.Data.NodeData = readFile.Read("/home/ritadev/Documents/Thesis_Work/Decision-Tree/trainwine.data")
-
+//Train uses the dataset to train a tree for later predicition
+func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64) Tree {
 	class1.count = 0
 	class2.count = 0
 	class3.count = 0
-
-	decTree = decTree.train()
-	testWines := readFile.Read("/home/ritadev/Documents/Thesis_Work/Decision-Tree/winetest.data")
-
-	decTree.test(testWines)
-}
-
-func (decTree Tree) train() Tree {
+	var setStack [][]*dataTypes.Data
 	var treeStack []*Tree
 
-	curr := &decTree
+	currTree := &decTree
+	currSet := trainSet
 	treeLen := 1
 
 	for treeLen != 0 {
-		avgClass(curr.Data.NodeData)
-		curr.findSplit()
+		avgClass(currSet)
+		left, right := currTree.findSplit(currSet, setVal, stopCond)
 
-		if curr.Data.Leaf == false {
-			treeStack = append(treeStack, curr.Right)
-			curr = curr.Left
+		if currTree.Details.Leaf == false {
+			setStack = append(setStack, right)
+			treeStack = append(treeStack, currTree.Right)
+			currSet = left
+			currTree = currTree.Left
 			treeLen++
 		} else {
 			//get the length of the tree and set curr to the last element in the list
 			treeLen--
 
 			if treeLen-1 >= 0 {
-				curr, treeStack = treeStack[treeLen-1], treeStack[:treeLen-1]
+				currTree, treeStack = treeStack[treeLen-1], treeStack[:treeLen-1]
+				currSet, setStack = setStack[treeLen-1], setStack[:treeLen-1]
 			}
 		}
 	}
 
-	fmt.Println("tree built")
 	return decTree
 }
 
-func (decTree Tree) test(Wines []*readFile.Wine) {
+//Test uses the dataset passed in to predict the dataset
+func (decTree Tree) Test(allData []*dataTypes.Data) {
 	misclassified := 0
 	fmt.Printf("+-----------+----------+\n")
 	fmt.Printf("| Predicted |  Actual  |\n")
 	fmt.Printf("+-----------+----------+\n")
-	for _, wine := range Wines {
-		prediction := getClass(decTree, *wine)
-		fmt.Printf("|     %d     |     %d    |\n", prediction, wine.Class)
-		if prediction != wine.Class {
+	for _, datum := range allData {
+		prediction := decTree.GetClass(*datum)
+		if prediction != datum.Class {
 			misclassified++
 		}
+		fmt.Printf("|     %d     |     %d    |\n", prediction, datum.Class)
 	}
 	fmt.Printf("+-----------+----------+\n")
 
-	fmt.Printf("%d out of %d wrongly classified\n", misclassified, len(Wines))
-	fmt.Printf("Misclassified: %f\n", float64(misclassified)/float64(len(Wines)))
+	fmt.Printf("%d out of %d wrongly classified\n", misclassified, len(allData))
+	fmt.Printf("Misclassified: %f\n", float64(misclassified)/float64(len(allData)))
 }
 
-func getClass(decTree Tree, wine readFile.Wine) int {
+//GetClass returns an int value that refers to the class a value belongs to
+func (decTree Tree) GetClass(datum dataTypes.Data) int {
 	currNode := &decTree
 
-	for currNode.Data.Leaf == false {
-		index := currNode.Data.IndexSplit
-		testVal := getFloatReflectVal(wine.FeatureSlice[index])
-		if testVal < currNode.Data.SplitVal {
+	for currNode.Details.Leaf == false {
+		index := currNode.Details.IndexSplit
+		testVal := getFloatReflectVal(datum.FeatureSlice[index])
+		if testVal < currNode.Details.SplitVal {
 			currNode = currNode.Left
 		} else {
 			currNode = currNode.Right
 		}
 	}
 
-	return currNode.Class
+	return currNode.Details.Class
 }
 
-func countClass(instance float64, splitVal float64) float64 {
-	if instance < splitVal {
-		return 1
+func (decTree *Tree) findSplit(currData []*dataTypes.Data, setVal, stopCond float64) ([]*dataTypes.Data, []*dataTypes.Data) {
+	if stoppingCond(currData, stopCond) {
+		decTree.Details.Leaf = true
+		decTree.Details.Class = getMajority(currData)
+		return nil, nil
 	}
 
-	return 0
-}
-
-func stoppingCond(nodeData []*readFile.Wine) bool {
-	var count [3]int
-	var percent [3]float64
-
-	for _, elem := range nodeData {
-		count[elem.Class-1]++
-	}
-
-	for i := range count {
-		percent[i] = float64(count[i]) / float64(len(nodeData))
-		if percent[i] >= stopCond {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (decTree *Tree) findSplit() {
-	if stoppingCond(decTree.Data.NodeData) {
-		decTree.Data.Leaf = true
-		decTree.Class = getMajority(decTree.Data.NodeData)
-		return
-	}
-
-	numFields := len(decTree.Data.NodeData[0].FeatureSlice)
+	numFields := len(currData[0].FeatureSlice)
 
 	var splitVals []float64
 	var entropys []float64
@@ -157,9 +144,9 @@ func (decTree *Tree) findSplit() {
 			class3Avg := getFloatReflectVal(class3.averages[i])
 			class3Std := getFloatReflectVal(class3.stdDev[i])
 
-			c1 := findEntropy(i, class1Avg, class1Std, decTree.Data.NodeData)
-			c2 := findEntropy(i, class2Avg, class2Std, decTree.Data.NodeData)
-			c3 := findEntropy(i, class3Avg, class3Std, decTree.Data.NodeData)
+			c1 := findEntropy(i, class1Avg, class1Std, currData)
+			c2 := findEntropy(i, class2Avg, class2Std, currData)
+			c3 := findEntropy(i, class3Avg, class3Std, currData)
 
 			//find best split for that attribute
 			tempVals = append(tempVals, class1Avg+class1Std, class2Avg+class2Std, class3Avg+class3Std)
@@ -175,66 +162,38 @@ func (decTree *Tree) findSplit() {
 	index := findIndex(entropys)
 
 	//don't use entropy as your stopping condition, find a way to measure the purity after a split
-	decTree.Data.Leaf = false
-	decTree.Data.SplitVal = splitVals[index]
-	decTree.Data.IndexSplit = index
+	decTree.Details.Leaf = false
+	decTree.Details.SplitVal = splitVals[index]
+	decTree.Details.IndexSplit = index
 
 	decTree.Left = new(Tree)
 	decTree.Right = new(Tree)
 
-	decTree.Left.usedIndicies = append(decTree.usedIndicies, decTree.Data.IndexSplit)
-	decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Data.IndexSplit)
+	decTree.Left.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
+	decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
 
-	for _, elem := range decTree.Data.NodeData {
+	var left []*dataTypes.Data
+	var right []*dataTypes.Data
+
+	for _, elem := range currData {
 		compVal := getFloatReflectVal(elem.FeatureSlice[index])
 
 		if compVal < splitVals[index] {
-			decTree.Left.Data.NodeData = append(decTree.Left.Data.NodeData, elem)
+			left = append(left, elem)
 		} else {
-			decTree.Right.Data.NodeData = append(decTree.Right.Data.NodeData, elem)
+			right = append(right, elem)
 		}
 	}
 
-	if len(decTree.Left.Data.NodeData) == len(decTree.Data.NodeData) {
-		decTree.Data.Leaf = true
-		decTree.Class = getMajority(decTree.Data.NodeData)
-	} else if len(decTree.Right.Data.NodeData) == len(decTree.Data.NodeData) {
-		decTree.Data.Leaf = true
-		decTree.Class = getMajority(decTree.Data.NodeData)
-	}
-}
-
-func findIndex(entropyVals []float64) int {
-	minVal := entropyVals[0]
-	minIndex := 0
-
-	for i, contender := range entropyVals {
-		if contender < minVal {
-			minIndex = i
-			minVal = contender
-		}
+	if len(left) == len(currData) {
+		decTree.Details.Leaf = true
+		decTree.Details.Class = getMajority(currData)
+		left, right = nil, nil
+	} else if len(right) == len(currData) {
+		decTree.Details.Leaf = true
+		decTree.Details.Class = getMajority(currData)
+		left, right = nil, nil
 	}
 
-	return minIndex
-}
-
-func avgClass(wines []*readFile.Wine) {
-	for _, wine := range wines {
-		if wine.Class == 1 {
-			class1.averages = runningAvg(class1.averages, *wine, class1.count)
-			class1.count++
-			class1Sample = append(class1Sample, wine)
-		} else if wine.Class == 2 {
-			class2.averages = runningAvg(class2.averages, *wine, class2.count)
-			class2.count++
-			class2Sample = append(class2Sample, wine)
-		} else if wine.Class == 3 {
-			class3.averages = runningAvg(class3.averages, *wine, class3.count)
-			class3.count++
-			class3Sample = append(class3Sample, wine)
-		}
-	}
-	class1.stdDev = findStds(class1Sample, class1)
-	class2.stdDev = findStds(class2Sample, class2)
-	class3.stdDev = findStds(class3Sample, class3)
+	return left, right
 }
