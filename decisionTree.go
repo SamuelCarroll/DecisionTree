@@ -2,6 +2,10 @@ package DecisionTree
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/SamuelCarroll/DataTypes"
 )
@@ -29,19 +33,8 @@ type ClassAvg struct {
 	stdDev   []interface{}
 }
 
-var class1 ClassAvg
-var class2 ClassAvg
-var class3 ClassAvg
-
-var class1Sample []*dataTypes.Data
-var class2Sample []*dataTypes.Data
-var class3Sample []*dataTypes.Data
-
 //Train uses the dataset to train a tree for later predicition
-func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64) Tree {
-	class1.count = 0
-	class2.count = 0
-	class3.count = 0
+func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64, classesCount int) Tree {
 	var setStack [][]*dataTypes.Data
 	var treeStack []*Tree
 
@@ -50,8 +43,20 @@ func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64) 
 	treeLen := 1
 
 	for treeLen != 0 {
-		avgClass(currSet)
-		left, right := currTree.findSplit(currSet, setVal, stopCond)
+		var classes []ClassAvg
+		var classSamples [][]*dataTypes.Data
+
+		for i := 0; i < classesCount; i++ {
+			var newClass ClassAvg
+
+			classes = append(classes, newClass)
+			classSamples = append(classSamples, *new([]*dataTypes.Data))
+
+			classes[i].count = 0
+		}
+
+		avgClass(currSet, classSamples, classes)
+		left, right := currTree.findSplit(currSet, classes, setVal, stopCond)
 
 		if currTree.Details.Leaf == false {
 			setStack = append(setStack, right)
@@ -63,7 +68,7 @@ func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64) 
 			//get the length of the tree and set curr to the last element in the list
 			treeLen--
 
-			if treeLen-1 >= 0 {
+			if treeLen > 0 {
 				currTree, treeStack = treeStack[treeLen-1], treeStack[:treeLen-1]
 				currSet, setStack = setStack[treeLen-1], setStack[:treeLen-1]
 			}
@@ -109,7 +114,132 @@ func (decTree Tree) GetClass(datum dataTypes.Data) int {
 	return currNode.Details.Class
 }
 
-func (decTree *Tree) findSplit(currData []*dataTypes.Data, setVal, stopCond float64) ([]*dataTypes.Data, []*dataTypes.Data) {
+//WriteTree will save a tree to a file for use later on
+func (decTree *Tree) WriteTree(filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Println("Error opening output file: ", filename)
+		return
+	}
+
+	currNode := decTree
+	var treeStack []*Tree
+
+	treeLen := 1
+	for treeLen != 0 {
+		file.WriteString(nodeToStr(currNode.Details))
+
+		if currNode.Details.Leaf == false {
+			treeStack = append(treeStack, currNode.Right)
+			currNode = currNode.Left
+			treeLen++
+		} else {
+			//get the length of the tree and set curr to the last element in the list
+			treeLen--
+
+			if treeLen > 0 {
+				currNode, treeStack = treeStack[treeLen-1], treeStack[:treeLen-1]
+			}
+		}
+	}
+
+	file.Close()
+}
+
+//ReadTree will read a tree from the specified filename
+func (decTree *Tree) ReadTree(filename string) error {
+	file, err := ioutil.ReadFile(filename)
+	if err != nil {
+		fmt.Println("Error opening input file: ", filename)
+		return err
+	}
+
+	sDat := fmt.Sprintf("%s", file)
+	datLines := strings.Split(sDat, "\n")
+
+	currNode := decTree
+	var treeStack []*Tree
+	treeLen := 1
+	lastNode := false
+
+	for _, line := range datLines {
+		if !lastNode {
+			currNode.Details.Leaf, currNode.Details.IndexSplit, currNode.Details.SplitVal, currNode.Details.Class, err = parseLine(line)
+			if err != nil {
+				return err
+			}
+
+			if currNode.Details.Leaf == false {
+				currNode.Left = new(Tree)
+				currNode.Right = new(Tree)
+
+				treeStack = append(treeStack, currNode.Right)
+				currNode = currNode.Left
+				treeLen++
+			} else {
+				treeLen--
+				if treeLen > 0 {
+					currNode, treeStack = treeStack[treeLen-1], treeStack[:treeLen-1]
+				} else {
+					lastNode = true
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func parseLine(line string) (bool, int, float64, int, error) {
+	lineItem := strings.Split(line, ",")
+	if len(lineItem) < 4 {
+		return false, 0, 0.0, 0, nil
+	}
+
+	leafNode, err := strconv.ParseBool(lineItem[0])
+	if err != nil {
+		return false, 0, 0.0, 0, err
+	}
+	splitIndex, err := getRegInt(lineItem[1])
+	if err != nil {
+		return false, 0, 0.0, 0, err
+	}
+	splitValue, err := strconv.ParseFloat(lineItem[2], 64)
+	if err != nil {
+		return false, 0, 0.0, 0, err
+	}
+	class, err := getRegInt(lineItem[3])
+	if err != nil {
+		return false, 0, 0.0, 0, err
+	}
+
+	return leafNode, splitIndex, splitValue, class, nil
+}
+
+func getRegInt(line string) (int, error) {
+	var retVal int
+
+	i64, err := strconv.ParseInt(line, 10, 32)
+	if err != nil {
+		return retVal, err
+	}
+
+	retVal = int(i64)
+
+	return retVal, nil
+}
+
+func nodeToStr(currNode Node) string {
+	leafStr := strconv.FormatBool(currNode.Leaf)
+	indexSplit := strconv.Itoa(currNode.IndexSplit)
+	splitVal := strconv.FormatFloat(currNode.SplitVal, 'f', 24, 64)
+	classStr := strconv.Itoa(currNode.Class)
+
+	return leafStr + "," + indexSplit + "," + splitVal + "," + classStr + "\n"
+}
+
+//TODO shorten this function!!!
+func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, setVal, stopCond float64) ([]*dataTypes.Data, []*dataTypes.Data) {
 	if stoppingCond(currData, stopCond) {
 		decTree.Details.Leaf = true
 		decTree.Details.Class = getMajority(currData)
@@ -120,6 +250,8 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, setVal, stopCond floa
 
 	var splitVals []float64
 	var entropys []float64
+	var left []*dataTypes.Data
+	var right []*dataTypes.Data
 
 	//for each attribute
 	for i := 0; i < numFields; i++ {
@@ -134,24 +266,26 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, setVal, stopCond floa
 
 		if indexUsed == false {
 			var tempVals []float64
-			// we want to get the average of the interface intance
-			class1Avg := getFloatReflectVal(class1.averages[i])
-			class1Std := getFloatReflectVal(class1.stdDev[i])
+			var averages []float64
+			var stdDevs []float64
+			var tempEntropys []float64
 
-			class2Avg := getFloatReflectVal(class2.averages[i])
-			class2Std := getFloatReflectVal(class2.stdDev[i])
+			for _, class := range classes {
+				if len(class.averages) == 0 {
+					averages = append(averages, setVal)
+					stdDevs = append(stdDevs, setVal)
+					tempVals = append(tempVals, setVal)
+					tempEntropys = append(tempEntropys, setVal)
+				} else {
+					averages = append(averages, getFloatReflectVal(class.averages[i]))
+					stdDevs = append(stdDevs, getFloatReflectVal(class.stdDev[i]))
+					tempVals = append(tempVals, averages[len(averages)-1]+stdDevs[len(stdDevs)-1])
+					tempEntropys = append(tempEntropys, findEntropy(i, len(classes), averages[len(averages)-1], stdDevs[len(stdDevs)-1], currData))
+				}
+			}
 
-			class3Avg := getFloatReflectVal(class3.averages[i])
-			class3Std := getFloatReflectVal(class3.stdDev[i])
-
-			c1 := findEntropy(i, class1Avg, class1Std, currData)
-			c2 := findEntropy(i, class2Avg, class2Std, currData)
-			c3 := findEntropy(i, class3Avg, class3Std, currData)
-
-			//find best split for that attribute
-			tempVals = append(tempVals, class1Avg+class1Std, class2Avg+class2Std, class3Avg+class3Std)
-
-			tempIndex, tempEntropy := findLeast(c1, c2, c3)
+			// TODO modify to take unspecified number of classes using a slice
+			tempIndex, tempEntropy := findLeast(tempEntropys)
 
 			//Here we have a problem, we are appending the entropy not the value to split on
 			splitVals = append(splitVals, tempVals[tempIndex])
@@ -171,9 +305,6 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, setVal, stopCond floa
 
 	decTree.Left.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
 	decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
-
-	var left []*dataTypes.Data
-	var right []*dataTypes.Data
 
 	for _, elem := range currData {
 		compVal := getFloatReflectVal(elem.FeatureSlice[index])

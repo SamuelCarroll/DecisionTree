@@ -7,25 +7,21 @@ import (
 	"github.com/SamuelCarroll/DataTypes"
 )
 
-func avgClass(allData []*dataTypes.Data) {
+// var classes []ClassAvg
+// var classSamples [][]*dataTypes.Data
+
+func avgClass(allData []*dataTypes.Data, classSamples [][]*dataTypes.Data, classes []ClassAvg) {
 	for _, datum := range allData {
-		if datum.Class == 1 {
-			class1.averages = runningAvg(class1.averages, *datum, class1.count)
-			class1.count++
-			class1Sample = append(class1Sample, datum)
-		} else if datum.Class == 2 {
-			class2.averages = runningAvg(class2.averages, *datum, class2.count)
-			class2.count++
-			class2Sample = append(class2Sample, datum)
-		} else if datum.Class == 3 {
-			class3.averages = runningAvg(class3.averages, *datum, class3.count)
-			class3.count++
-			class3Sample = append(class3Sample, datum)
-		}
+		classIndex := datum.Class - 1
+
+		classes[classIndex].averages = runningAvg(classes[classIndex].averages, *datum, classes[classIndex].count)
+		classes[classIndex].count++
+		classSamples[classIndex] = append(classSamples[classIndex], datum)
 	}
-	class1.stdDev = findStds(class1Sample, class1)
-	class2.stdDev = findStds(class2Sample, class2)
-	class3.stdDev = findStds(class3Sample, class3)
+
+	for i, class := range classes {
+		classes[i].stdDev = findStds(classSamples[i], class)
+	}
 }
 
 func getMajority(data []*dataTypes.Data) int {
@@ -66,39 +62,34 @@ func stoppingCond(nodeData []*dataTypes.Data, stopCond float64) bool {
 	return false
 }
 
-func findEntropy(valueIndex int, avg, stdDev float64, nodeData []*dataTypes.Data) float64 {
-	//TODO consider turning this into an array
-	in1, in2, in3 := 0.0, 0.0, 0.0
-	e1, w1, e2, w2, e3, w3 := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+func findEntropy(valueIndex, classCount int, avg, stdDev float64, nodeData []*dataTypes.Data) float64 {
+	var classInstances []float64
+	var classEntropies []float64
+	var classWeights []float64
+
+	for i := 0; i < classCount; i++ {
+		classInstances = append(classInstances, 0.0)
+		classEntropies = append(classEntropies, 0.0)
+		classWeights = append(classWeights, 0.0)
+	}
 
 	for _, datum := range nodeData {
-
 		instance := getFloatReflectVal(datum.FeatureSlice[valueIndex])
-		if datum.Class == 1 {
-			in1 += countClass(instance, avg+stdDev)
-		} else if datum.Class == 2 {
-			in2 += countClass(instance, avg+stdDev)
-		} else if datum.Class == 3 {
-			in3 += countClass(instance, avg+stdDev)
-		}
+		classIndex := datum.Class - 1
+
+		classInstances[classIndex] += countClass(instance, avg+stdDev)
 	}
 
 	lenData := float64(len(nodeData))
 
-	if in1 > 0 {
-		w1 = in1 / lenData
-		e1 = (w1) * math.Log2(w1)
+	entropy := 0.0
+	for i := 0; i < classCount; i++ {
+		if classInstances[i] > 0 {
+			classWeights[i] = classInstances[i] / lenData
+			classEntropies[i] = classWeights[i] * math.Log2(classWeights[i])
+			entropy += classWeights[i] * classEntropies[i]
+		}
 	}
-	if in2 > 0 {
-		w2 = in2 / lenData
-		e2 = (w2) * math.Log2(w2)
-	}
-	if in3 > 0 {
-		w3 = in3 / lenData
-		e3 = (w3) * math.Log2(w3)
-	}
-
-	entropy := w1*e1 + w2*e2 + w3*e3
 
 	return entropy * -1
 }
@@ -128,14 +119,19 @@ func initializeAvgs(example dataTypes.Data) []interface{} {
 	return newAvgVals
 }
 
-func findLeast(c1, c2, c3 float64) (int, float64) {
-	if c1 <= c2 && c1 <= c3 {
-		return 0, c1
-	} else if c2 <= c1 && c2 <= c3 {
-		return 1, c2
+//TODO generalize this
+func findLeast(values []float64) (int, float64) {
+	leastIndex := 0
+	leastVal := values[0]
+
+	for i, val := range values {
+		if val < leastVal {
+			leastVal = val
+			leastIndex = i
+		}
 	}
 
-	return 2, c3
+	return leastIndex, leastVal
 }
 
 func runningAvg(oldAvgs []interface{}, newVal dataTypes.Data, n int) []interface{} {
@@ -157,8 +153,12 @@ func runningAvg(oldAvgs []interface{}, newVal dataTypes.Data, n int) []interface
 }
 
 func findStds(classSam []*dataTypes.Data, class ClassAvg) []interface{} {
-
 	var stdDev []interface{}
+
+	if len(classSam) == 0 {
+		return stdDev
+	}
+
 	featureLen := len(classSam[0].FeatureSlice)
 
 	for i := 0; i < featureLen; i++ {
@@ -170,6 +170,7 @@ func findStds(classSam []*dataTypes.Data, class ClassAvg) []interface{} {
 			fclass := getFloatReflectVal(class.averages[i])
 			classTotal += math.Pow((fsample - fclass), 2)
 		}
+
 		stdDev = append(stdDev, classTotal/float64(class.count))
 	}
 
