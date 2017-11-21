@@ -99,6 +99,13 @@ func (decTree Tree) Test(allData []*dataTypes.Data) {
 
 //GetClass returns an int value that refers to the class a value belongs to
 func (decTree Tree) GetClass(datum dataTypes.Data) int {
+	currNode := decTree.GetTerminalNode(datum)
+
+	return currNode.Details.Class
+}
+
+//GetTerminalNode iterates through a tree for some datum and then returns that node
+func (decTree Tree) GetTerminalNode(datum dataTypes.Data) *Tree {
 	currNode := &decTree
 
 	for currNode.Details.Leaf == false {
@@ -111,7 +118,7 @@ func (decTree Tree) GetClass(datum dataTypes.Data) int {
 		}
 	}
 
-	return currNode.Details.Class
+	return currNode
 }
 
 //WriteTree will save a tree to a file for use later on
