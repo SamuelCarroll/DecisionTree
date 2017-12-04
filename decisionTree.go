@@ -110,7 +110,7 @@ func (decTree Tree) GetTerminalNode(datum dataTypes.Data) *Tree {
 
 	for currNode.Details.Leaf == false {
 		index := currNode.Details.IndexSplit
-		testVal := getFloatReflectVal(datum.FeatureSlice[index])
+		testVal := GetFloatReflectVal(datum.FeatureSlice[index])
 		if testVal < currNode.Details.SplitVal {
 			currNode = currNode.Left
 		} else {
@@ -284,8 +284,8 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 					tempVals = append(tempVals, setVal)
 					tempEntropys = append(tempEntropys, setVal)
 				} else {
-					averages = append(averages, getFloatReflectVal(class.averages[i]))
-					stdDevs = append(stdDevs, getFloatReflectVal(class.stdDev[i]))
+					averages = append(averages, GetFloatReflectVal(class.averages[i]))
+					stdDevs = append(stdDevs, GetFloatReflectVal(class.stdDev[i]))
 					tempVals = append(tempVals, averages[len(averages)-1]+stdDevs[len(stdDevs)-1])
 					tempEntropys = append(tempEntropys, findEntropy(i, len(classes), averages[len(averages)-1], stdDevs[len(stdDevs)-1], currData))
 				}
@@ -314,7 +314,7 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 	decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
 
 	for _, elem := range currData {
-		compVal := getFloatReflectVal(elem.FeatureSlice[index])
+		compVal := GetFloatReflectVal(elem.FeatureSlice[index])
 
 		if compVal < splitVals[index] {
 			left = append(left, elem)

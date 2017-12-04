@@ -74,7 +74,7 @@ func findEntropy(valueIndex, classCount int, avg, stdDev float64, nodeData []*da
 	}
 
 	for _, datum := range nodeData {
-		instance := getFloatReflectVal(datum.FeatureSlice[valueIndex])
+		instance := GetFloatReflectVal(datum.FeatureSlice[valueIndex])
 		classIndex := datum.Class - 1
 
 		classInstances[classIndex] += countClass(instance, avg+stdDev)
@@ -144,7 +144,7 @@ func runningAvg(oldAvgs []interface{}, newVal dataTypes.Data, n int) []interface
 		switch val := oldAvgs[i].(type) {
 		case float64:
 			temp := float64(val) * float64(n)
-			temp += getFloatReflectVal(newVal.FeatureSlice[i])
+			temp += GetFloatReflectVal(newVal.FeatureSlice[i])
 			oldAvgs[i] = temp / float64(n+1)
 		}
 	}
@@ -166,8 +166,8 @@ func findStds(classSam []*dataTypes.Data, class ClassAvg) []interface{} {
 		for _, sample := range classSam {
 			class.stdDev = append(class.stdDev, 0.0)
 			//reflect the type of the feature slice index handle float, bool and string (don't worry about bool and str yet)
-			fsample := getFloatReflectVal(sample.FeatureSlice[i])
-			fclass := getFloatReflectVal(class.averages[i])
+			fsample := GetFloatReflectVal(sample.FeatureSlice[i])
+			fclass := GetFloatReflectVal(class.averages[i])
 			classTotal += math.Pow((fsample - fclass), 2)
 		}
 
@@ -191,7 +191,7 @@ func findIndex(entropyVals []float64) int {
 	return minIndex
 }
 
-func getFloatReflectVal(val interface{}) float64 {
+func GetFloatReflectVal(val interface{}) float64 {
 	v := reflect.ValueOf(val)
 	v = reflect.Indirect(v)
 
@@ -199,7 +199,7 @@ func getFloatReflectVal(val interface{}) float64 {
 	return floatVal.Float()
 }
 
-func getBoolReflectVal(val interface{}) bool {
+func GetBoolReflectVal(val interface{}) bool {
 	v := reflect.ValueOf(val)
 	v = reflect.Indirect(v)
 
@@ -207,7 +207,7 @@ func getBoolReflectVal(val interface{}) bool {
 	return boolVal.Bool()
 }
 
-func getStrReflectVal(val interface{}) string {
+func GetStrReflectVal(val interface{}) string {
 	v := reflect.ValueOf(val)
 	v = reflect.Indirect(v)
 
