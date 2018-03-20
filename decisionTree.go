@@ -3,6 +3,7 @@ package DecisionTree
 import (
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ type ClassAvg struct {
 }
 
 //Train uses the dataset to train a tree for later predicition
-func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64, classesCount int) Tree {
+func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64, classesCount int, removeRand bool) Tree {
 	var setStack [][]*dataTypes.Data
 	var treeStack []*Tree
 
@@ -50,6 +51,12 @@ func (decTree Tree) Train(trainSet []*dataTypes.Data, setVal, stopCond float64, 
 	currTree := &decTree
 	currSet := trainSet
 	treeLen := 1
+
+	if removeRand == true {
+		currTree.usedIndicies = removeRandAttributes(len(trainSet[0].FeatureSlice))
+	} else {
+		currTree.usedIndicies = removePValAttributes(trainSet)
+	}
 
 	//Ensure we have values before continuing, otherwise we get a runtime error
 	for treeLen != 0 {
@@ -102,8 +109,8 @@ func (decTree Tree) Test(allData []*dataTypes.Data) {
 	fmt.Printf("| Predicted |  Actual  |           UID           |\n")
 	fmt.Printf("+-----------+----------+-------------------------+\n")
 	//For each datum in the data range run it through the completed tree
-	for _, datum := range allData {
-		prediction := decTree.GetClass(*datum)
+	for i, datum := range allData {
+		prediction := decTree.GetClass(*datum, i)
 		//Check if we have misclassified data, increasing misclassified count if we do
 		if prediction != datum.Class {
 			misclassified++
@@ -127,24 +134,32 @@ func (decTree Tree) Test(allData []*dataTypes.Data) {
 }
 
 //GetClass returns an int value that refers to the class a value belongs to
-func (decTree Tree) GetClass(datum dataTypes.Data) int {
-	currNode := decTree.GetTerminalNode(datum)
+func (decTree Tree) GetClass(datum dataTypes.Data, i int) int {
+	currNode := decTree.GetTerminalNode(datum, i)
 
-	return currNode.Details.Class
+	if currNode != nil {
+		return currNode.Details.Class
+	}
+
+	return 2
 }
 
 //GetTerminalNode iterates through a tree for a datum and then returns that node
 //that datum is classified into
-func (decTree Tree) GetTerminalNode(datum dataTypes.Data) *Tree {
+func (decTree Tree) GetTerminalNode(datum dataTypes.Data, i int) *Tree {
 	currNode := &decTree
 
 	for currNode.Details.Leaf == false {
 		index := currNode.Details.IndexSplit
-		testVal := getVal(datum.FeatureSlice[index])
-		if testVal <= currNode.Details.SplitVal {
-			currNode = currNode.Left
+		if index < len(datum.FeatureSlice) {
+			testVal := getVal(datum.FeatureSlice[index])
+			if testVal <= currNode.Details.SplitVal {
+				currNode = currNode.Left
+			} else {
+				currNode = currNode.Right
+			}
 		} else {
-			currNode = currNode.Right
+			return nil
 		}
 	}
 
@@ -243,6 +258,31 @@ func (decTree *Tree) ReadTree(filename string) error {
 	return nil
 }
 
+//This function will remove random attributes to increase classification in a
+//'non-deterministic' manner
+func removeRandAttributes(attributeCount int) []int {
+	var randAttributes []int
+
+	removeAttributes := int(attributeCount/4 + 1)
+
+	for i := 0; i < removeAttributes; i++ {
+		index := rand.Int() % attributeCount
+
+		randAttributes = append(randAttributes, index)
+	}
+
+	return randAttributes
+}
+
+//This function will use the p-value to remove uninformative features to increase
+//splits based on informative features see https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4387916/
+//for more
+func removePValAttributes(dataSet []*dataTypes.Data) []int {
+	var pValAttributes []int
+
+	return pValAttributes
+}
+
 //parseLine will parse a single line from a tree file
 func parseLine(line string) (bool, int, float64, int, error) {
 	//Split the line on commas (basically we have a csv)
@@ -326,10 +366,11 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 				entropys = append(entropys, setVal)
 				splitVals = append(splitVals, 0)
 				indexUsed = true
+				break
 			}
 		}
 
-		//ensure we haven't used this index before calculating the entrophy
+		//ensure we haven't used this index before calculating the entropy
 		if indexUsed == false {
 			var tempVals []float64
 			var averages []float64
@@ -350,6 +391,7 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 					//a proposed split value and the entropy of using that split value
 					averages = append(averages, GetFloatReflectVal(class.averages[i]))
 					stdDevs = append(stdDevs, GetFloatReflectVal(class.stdDev[i]))
+					//TODO try not adding the STDDev and then try subtracting the STDDev see if that improves classification
 					tempVals = append(tempVals, averages[len(averages)-1]+stdDevs[len(stdDevs)-1])
 					tempEntropys = append(tempEntropys, findEntropy(i, len(classes), averages[len(averages)-1], stdDevs[len(stdDevs)-1], currData))
 				}
@@ -357,6 +399,7 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 
 			//Find which class has the better split value
 			tempIndex, tempEntropy := findLeast(tempEntropys)
+			//_, tempEntropy = findLeast(tempEntropys)
 
 			//add that entropy and split value to our list for later use
 			splitVals = append(splitVals, tempVals[tempIndex])
@@ -376,9 +419,11 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 	decTree.Left = new(Tree)
 	decTree.Right = new(Tree)
 
-	//Add the index to the used indicies list
-	decTree.Left.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
-	decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
+	//Add the index to the used indicies list if a binary value
+	if decTree.Details.IndexSplit > 7 && decTree.Details.IndexSplit < 27 {
+		decTree.Left.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
+		decTree.Right.usedIndicies = append(decTree.usedIndicies, decTree.Details.IndexSplit)
+	}
 
 	for _, elem := range currData {
 		compVal := getVal(elem.FeatureSlice[index])
@@ -406,6 +451,8 @@ func (decTree *Tree) findSplit(currData []*dataTypes.Data, classes []ClassAvg, s
 
 //getVal will get a value from an abstract interface type
 func getVal(val interface{}) float64 {
+	//I think I'm not handling strings correctly, If I get a string I'm assinging
+	//it to a 0.0 value then can split on it...oops
 	testVal := 0.0
 	//switch on the detected type of variable, currently we support
 	//float64 and bool values
