@@ -7,9 +7,6 @@ import (
 	"github.com/SamuelCarroll/DataTypes"
 )
 
-// var classes []ClassAvg
-// var classSamples [][]*dataTypes.Data
-
 //avgClass will average all attributes for all classes and return the running average
 //and standard deviation
 func avgClass(allData []*dataTypes.Data, classSamples [][]*dataTypes.Data, classes []ClassAvg) {
@@ -95,6 +92,7 @@ func findEntropy(valueIndex, classCount int, avg, stdDev float64, nodeData []*da
 		instance := getVal(datum.FeatureSlice[valueIndex])
 		classIndex := datum.Class - 1
 
+		//TODO try not adding the STDDev and then try subtracting the STDDev see if that improves classification
 		classInstances[classIndex] += countClass(instance, avg+stdDev)
 	}
 
@@ -111,6 +109,7 @@ func findEntropy(valueIndex, classCount int, avg, stdDev float64, nodeData []*da
 		}
 	}
 
+	//TODO also try to remove the *-1 just to see...
 	return entropy * -1
 }
 
